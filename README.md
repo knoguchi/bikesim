@@ -14,3 +14,4 @@ Crank and chainrings model [Torque Talk](https://www.sheldonbrown.com/twist.html
 
 Shimano 105 [Cassette Sprocket (11-speed)](http://si.shimano.com/pdfs/dm/DM-CS0004-04-ENG.pdf) spec
 
+https://jitensha-tanken.geo.jp/pedal_rpm.html

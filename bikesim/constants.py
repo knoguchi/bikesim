@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
+from scipy.constants import g as G
 # Rolling resistance coeeficient
 # P = Crr x N x v
 # See https://en.wikipedia.org/wiki/Rolling_resistance
-Crr = 0.0022  # Production bicycle tires at 120 psi (8.3 bar) and 50 km/h (31 mph), measured on rollers
-
+#Crr = 0.0022  # Production bicycle tires at 120 psi (8.3 bar) and 50 km/h (31 mph), measured on rollers
+Road_Condition = 1.0
+Tire_Resistance = 0.0036
+Crr = Road_Condition * Tire_Resistance
 # Air drag coefficient
 # P = 0.5 x ρ x v^2 x Cd x A
 # See https://en.wikipedia.org/wiki/Drag_coefficient
-Cd = 0.88  # Road bicycle plus cyclist, touring position
+Cd = 0.50  # Road bicycle plus cyclist, touring position
 # Rider
 S = 0.36  # m^2 frontal surface
 
@@ -30,3 +33,9 @@ u = 0.9  # Concrete or asphalt (dry) 0.8-0.9
 
 # Air density
 Rho = 1.2041  # kg/m^3, at 20C, 101.325 kPa, dry air
+
+# constants
+K = 273
+Standard_BMI = 22
+Standard_Height = 1.7  # 1.7m
+g = G

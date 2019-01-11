@@ -4,7 +4,7 @@ from math import sin, cos, tan, radians, degrees, atan, sqrt, pi
 from scipy.constants import g
 
 from bikesim import Vector
-from bikesim.constants import Crr, Cd, S, Rho
+from bikesim.constants import Crr, Cd, Rho, K
 
 
 def km(v):
@@ -19,21 +19,49 @@ class Bike:
         self._wheelbase = wheelbase / 1000  # convert to meter
         self._bike_weight = weight
         self._m = 0  # total mass of bike and rider
+        self._sa = 0  # total surface area of bike and rider
         self._crank_r = 0.17
-        self._tire_r = 0.700 / 2  # 700c tires
+        self._tire_r = 0.690 / 2  # 700c tires
+        self._tire_width = 0.028  # 28mm
         self._status = {}
 
         # gears.  outer-top, inner-low
-        self._front_chainrings = [52, 36]  # inner-outer 1-2
-        self._rear_chainrings = [28, 25, 23, 21, 19, 17, 15, 14, 13, 12, 11]  # Low-Top 1-11
-
+        self._front_chainrings = [50, 52, 36]  # inner-outer 1-2
+        self._rear_chainrings = [20, 28, 25, 23, 21, 19, 17, 15, 14, 13, 12, 11]  # Low-Top 1-11
+        self._front_t = 9999
+        self._rear_t = 9999
         self.set_steer(0)
         self.set_front_derailleur(0)
         self.set_rear_derailleur(0)
         self.set_head_angle(head_angle)
 
-    def set_rider_weight(self, rider_weight):
-        self._m = self._bike_weight + rider_weight
+    @property
+    def tire_r(self):
+        return self._tire_r
+
+    def bike_prop(self, t):
+        bike_types = dict(
+            city=dict(resist=0.008, w=38),
+            cross=dict(resist=0.006, w=35),
+            mtb=dict(resist=0.01, w=55),
+            road=dict(resist=0.0036, w=28),
+        )
+        return bike_types.get(t)
+
+    @property
+    def total_weight(self):
+        return self._m
+
+    @property
+    def surface_area(self):
+        return self._tire_r * 2 * self._tire_width
+
+    def set_rider(self, rider):
+        # TODO: cyclick ref is bad
+        self._m = self._bike_weight + rider.weight
+        bike_sa = self._tire_r * 2 * self._tire_width
+        body_sa = rider.body_surface_area()
+        self._sa = bike_sa + body_sa
 
     def set_world_position(self, wp):
         self._world_position = wp
@@ -44,11 +72,17 @@ class Bike:
     def set_head_angle(self, degree):
         self._lambda = radians(90 - degree)
 
+    def _update_gain_ratio(self):
+        self._gear_ratio =self._front_t / self._rear_t
+        self._torque_gain = (self._tire_r / self._crank_r) * self._gear_ratio
+        self._status.update(torque_gain=self._torque_gain, gear_ratio=self._gear_ratio)
+
     def set_front_derailleur(self, n):
         self._front_gear = n
         self._front_t = self._front_chainrings[n]
         self._front_chainring_r = self._front_t * 0.0127 / pi / 2
         self._status.update(front_gear=n)
+        self._update_gain_ratio()
         return self._front_t
 
     def set_rear_derailleur(self, n):
@@ -56,6 +90,7 @@ class Bike:
         self._rear_t = self._rear_chainrings[n]
         self._rear_chainring_r = self._rear_t * 0.0127 / pi / 2
         self._status.update(rear_gear=n)
+        self._update_gain_ratio()
         return self._rear_t
 
     def shift_down_front(self):
@@ -65,6 +100,9 @@ class Bike:
         """
         if self._front_gear > 0:
             self.set_front_derailleur(self._front_gear - 1)
+            return True
+        print("Can't shift down front")
+        return False
 
     def shift_up_front(self):
         """
@@ -73,6 +111,9 @@ class Bike:
         """
         if self._front_gear < len(self._front_chainrings) - 1:
             self.set_front_derailleur(self._front_gear + 1)
+            return True
+        print("Can't shift up front")
+        return False
 
     def shift_down_rear(self):
         """
@@ -81,6 +122,9 @@ class Bike:
         """
         if self._rear_gear < len(self._rear_chainrings) - 1:
             self.set_rear_derailleur(self._rear_gear + 1)
+            return True
+        print("Can't shift down rear")
+        return False
 
     def shift_up_rear(self):
         """
@@ -89,6 +133,9 @@ class Bike:
         """
         if self._rear_gear > 0:
             self.set_rear_derailleur(self._rear_gear - 1)
+            return True
+        print("Can't shift up rear")
+        return False
 
     def set_steer(self, degree):
         if -90 < degree < 90:
@@ -100,12 +147,16 @@ class Bike:
     def steer_angle(self):
         return degrees(self._steer_angle)
 
-    def speed(self, velocity_in_km=None):
-        if velocity_in_km is not None:
-            self._v = velocity_in_km * 1000 / 3600  # convert to v = meter/sec
-        return km(self._v)
+    def speed(self):
+        return self._v
 
-    def run(self, dt, input_power, cadence, u=0, bank_beta=0):
+    # It shouldn't need set-speed function
+    # def speed(self, velocity_in_km=None):
+    #     if velocity_in_km is not None:
+    #         self._v = velocity_in_km * 1000 / 3600  # convert to v = meter/sec
+    #     return km(self._v)
+
+    def run(self, dt, input_power, cadence, u=0, bank_beta=0, head_wind=0):
         """
         Calculate delta vector after dt second.
         This function does not update the world coordinate
@@ -119,7 +170,7 @@ class Bike:
         rr = self.f_rolling_resistance()
 
         # Air drag
-        rd = self.f_wind()
+        rd = self.f_wind(self._v + head_wind)
 
         # slope
         if bank_beta > 0:
@@ -235,15 +286,16 @@ class Bike:
         """
         Rolling Resistance Force
         """
-        rr = self._m * g * Crr * self._v
+        rr = self._m * g * Crr
         self._status.update(rolling_resistance=rr)
         return rr
 
-    def f_wind(self):
+    def f_wind(self, v, air_temp=20):
         """
         Wind drag
         """
-        wind_drag = 0.5 * Rho * (self._v ** 2) * Cd * S
+        density = Rho * K / (K + air_temp)
+        wind_drag = 0.5 * density * (v ** 2) * Cd * self._sa
         self._status.update(wind_drag=wind_drag)
         return wind_drag
 
@@ -266,14 +318,14 @@ class Bike:
         -> rear wheel
         """
         if power > 0 and cadence > 0:
-            # crank_torque = pedaling_f * self._crank_r * 9.8
-            # power = crank_torque * radians(60 * 360 / rpm)
-            crank_torque = power / radians(60 * 360 / cadence)
-            chain_tension = crank_torque / self._front_chainring_r
+            # bottom_bracket_torque = pedaling_f * self._crank_r * 9.8
+            # power = bottom_bracket_torque * radians(60 * 360 / rpm)
+            bottom_bracket_torque = power / radians(60 * 360 / cadence)
+            chain_tension = bottom_bracket_torque / self._front_chainring_r
             rear_hub_torque = chain_tension * self._rear_chainring_r
             drive_force = rear_hub_torque / self._tire_r
         else:
-            crank_torque = 0
+            bottom_bracket_torque = 0
             chain_tension = 0
             rear_hub_torque = 0
             drive_force = 0
@@ -281,7 +333,7 @@ class Bike:
         self._status.update(
             power=power,
             drive_force=drive_force,
-            crank_torque=crank_torque,
+            bottom_bracket_torque=bottom_bracket_torque,
             chain_tension=chain_tension,
             rear_hub_torque=rear_hub_torque
         )

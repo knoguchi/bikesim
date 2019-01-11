@@ -1,8 +1,8 @@
 import sys
-from datetime import timedelta
 from math import sin, cos, radians, degrees
 
 import matplotlib.pyplot as plt
+from datetime import timedelta
 
 from bikesim import Vector
 from bikesim.constants import u
@@ -101,12 +101,13 @@ class Simulator:
         keys = [
             ("power", "Power", ",", "W", int),
             ("cadence", "Cadence", ",", "rpm", int),
-            ("v", "Speed", ".2f", "km/h", float),
+            ("v", "Speed", ".2f", "km/h", lambda x: x * 3600 / 1000),
             (None, None, None, None, None),
             ("accelaration", "Accel", ".2f", "m/s^2", float),
-            ("crank_torque", "Crank torque", ".2f", "Nm", float),
+            ("bottom_bracket_torque", "BB torque", ".2f", "Nm", float),
             ("chain_tension", "Chain tension", ".2f", "N", float),
             ("rear_hub_torque", "Rear torque", ".2f", "Nm", float),
+            ("torque_gain", "Gain", ".1f", "", float),
 
             (None, None, None, None, None),
             ("drive_force", "Drive force", ".2f", "N", float),
@@ -118,6 +119,7 @@ class Simulator:
             (None, None, None, None, None),
             ("front_gear", "Front", "", "", lambda x: "Outer" if x == 0 else "Inner"),
             ("rear_gear", "Rear", "", "", lambda x: ordinal(x + 1)),
+            ("gear_ratio", "Current gear ratio", ".2f", "", float),
             ("steer", "Steer", ".1f", "deg", float),
 
         ]
@@ -127,7 +129,18 @@ class Simulator:
         keys = [
             ("power", "Power", ",", "W", int),
             ("cadence", "Cadence", ",", "rpm", int),
+            ("required_power", "Power required", ",", "W", int),
+            ("required_gear_ratio", "Required gear ratio", ".2f", "", float),
+            (None, None, None, None, None),
+            ("warning", "Status", "", "", str),
             ("fatigue", "Fatigue", "", "%", lambda v: int(v * 100)),
+            (None, None, None, None, None),
+            ("required_power", "Power required", ",", "W", int),
+            ("rolling_resistance_power", "Rolling resistance", ",", "W", int),
+            ("air_drag_power", "Air drag", ",", "W", int),
+            ("slope_resistance_power", "Slope resistance", ",", "W", int),
+            ("drive_loss_power", "Drivetrain loss", ",", "W", int),
+
         ]
         return self.stats_formatter(self.rider, keys)
 
